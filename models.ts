@@ -33,22 +33,6 @@ export const AVAILABLE_MODELS: AIModel[] = [
     apiKeyEnv: 'GEMINI_API_KEY',
     available: true
   },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    provider: 'gemini',
-    description: 'Stable 2.5 model, reliable and fast',
-    apiKeyEnv: 'GEMINI_API_KEY',
-    available: true
-  },
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    provider: 'gemini',
-    description: 'Stable 2.5 Pro, great reasoning',
-    apiKeyEnv: 'GEMINI_API_KEY',
-    available: true
-  },
 
   // Anthropic Claude 4.5 Models (December 2025)
   {
@@ -77,22 +61,6 @@ export const AVAILABLE_MODELS: AIModel[] = [
   },
 
   // OpenAI Models (December 2025)
-  {
-    id: 'gpt-5-mini',
-    name: 'GPT-5 Mini',
-    provider: 'openai',
-    description: 'Faster, cost-efficient version of GPT-5 for well-defined tasks',
-    apiKeyEnv: 'OPENAI_API_KEY',
-    available: true
-  },
-  {
-    id: 'gpt-5-nano',
-    name: 'GPT-5 Nano',
-    provider: 'openai',
-    description: 'Fastest, most cost-efficient version of GPT-5',
-    apiKeyEnv: 'OPENAI_API_KEY',
-    available: true
-  },
   {
     id: 'gpt-5.2',
     name: 'GPT-5.2',
