@@ -10,7 +10,7 @@ import ReactDOM from 'react-dom/client';
 
 import { Artifact, Session, ComponentVariation, LayoutOption, SavedComponent, Collection } from './types';
 import { INITIAL_PLACEHOLDERS } from './constants';
-import { DEFAULT_MODEL } from './models';
+import { DEFAULT_MODEL, getModelById, AVAILABLE_MODELS } from './models';
 import { generateId, generateContent, streamGenerateContent, streamVariations, getSavedComponents, saveComponent, removeComponent, getCollections, saveCollection, deleteCollection } from './utils';
 
 import DottedGlowBackground from './components/DottedGlowBackground';
@@ -63,10 +63,14 @@ function App() {
   const [collections, setCollections] = useState<Collection[]>(getCollections());
   const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
 
-  // Model selection state
+  // Model selection state - validate stored model exists in current AVAILABLE_MODELS
   const [selectedModelId, setSelectedModelId] = useState<string>(() => {
     const stored = localStorage.getItem('flash-ui-selected-model');
-    return stored || DEFAULT_MODEL;
+    // Validate that stored model still exists (models may have been renamed/removed)
+    if (stored && getModelById(stored)) {
+      return stored;
+    }
+    return DEFAULT_MODEL;
   });
 
   useEffect(() => {
@@ -112,10 +116,6 @@ function App() {
               libraryMenu.classList.remove('open');
           }
 
-          const styleDropdown = document.querySelector('.style-dna-dropdown');
-          if (styleDropdown && !styleDropdown.contains(event.target as Node)) {
-              styleDropdown.classList.remove('open');
-          }
       };
 
       document.addEventListener('mousedown', handleClickOutside);

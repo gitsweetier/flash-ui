@@ -1960,82 +1960,6 @@ html, body {
     background: rgba(255, 255, 255, 0.1);
 }
 
-/* === Style DNA Dropdown === */
-.style-dna-dropdown {
-    position: relative;
-}
-
-.style-dna-trigger {
-    background: var(--input-bg);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    padding: 8px 16px;
-    border-radius: 999px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-}
-
-.style-dna-trigger:hover {
-    background: rgba(255,255,255,0.15);
-    border-color: rgba(255,255,255,0.3);
-}
-
-.style-dna-trigger.active {
-    background: rgba(147, 51, 234, 0.15);
-    border-color: rgba(147, 51, 234, 0.4);
-    color: #c084fc;
-}
-
-.style-dna-menu {
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(24, 24, 27, 0.95);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    padding: 8px;
-    min-width: 160px;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.2s ease;
-    z-index: 100;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-}
-
-.style-dna-dropdown:hover .style-dna-menu,
-.style-dna-dropdown.open .style-dna-menu {
-    opacity: 1;
-    visibility: visible;
-}
-
-.style-dna-menu button {
-    display: block;
-    width: 100%;
-    padding: 10px 14px;
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    font-size: 0.85rem;
-    text-align: left;
-    cursor: pointer;
-    border-radius: 8px;
-    transition: background 0.15s;
-}
-
-.style-dna-menu button:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
 
 /* === Favorite Button === */
 .favorite-button {
@@ -2073,17 +1997,6 @@ html, body {
 
     .library-toggle {
         padding: 6px 10px;
-    }
-
-    .style-dna-dropdown {
-        position: static;
-    }
-
-    .style-dna-menu {
-        position: fixed;
-        bottom: 180px;
-        left: 50%;
-        transform: translateX(-50%);
     }
 
     .word-chips {

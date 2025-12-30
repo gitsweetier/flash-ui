@@ -78,34 +78,26 @@ export const AVAILABLE_MODELS: AIModel[] = [
 
   // OpenAI Models (December 2025)
   {
-    id: 'gpt-4o',
-    name: 'GPT-4o',
+    id: 'gpt-5-mini',
+    name: 'GPT-5 Mini',
     provider: 'openai',
-    description: 'Flagship multimodal model with vision',
+    description: 'Faster, cost-efficient version of GPT-5 for well-defined tasks',
     apiKeyEnv: 'OPENAI_API_KEY',
     available: true
   },
   {
-    id: 'gpt-4o-mini',
-    name: 'GPT-4o Mini',
+    id: 'gpt-5-nano',
+    name: 'GPT-5 Nano',
     provider: 'openai',
-    description: 'Fast, affordable model for focused tasks',
+    description: 'Fastest, most cost-efficient version of GPT-5',
     apiKeyEnv: 'OPENAI_API_KEY',
     available: true
   },
   {
-    id: 'gpt-4.1',
-    name: 'GPT-4.1',
+    id: 'gpt-5.2',
+    name: 'GPT-5.2',
     provider: 'openai',
-    description: 'Smartest non-reasoning model, 1M token context',
-    apiKeyEnv: 'OPENAI_API_KEY',
-    available: true
-  },
-  {
-    id: 'gpt-4.1-mini',
-    name: 'GPT-4.1 Mini',
-    provider: 'openai',
-    description: 'Smaller, faster version of GPT-4.1',
+    description: 'GPT-5.2 Thinking - primary reasoning model for professional work',
     apiKeyEnv: 'OPENAI_API_KEY',
     available: true
   }
