@@ -842,16 +842,25 @@ IMPORTANT: Use the SAME visual style (colors, fonts, textures, effects) but crea
       const baseTime = Date.now();
       const sessionId = generateId();
 
-      const placeholderArtifacts: Artifact[] = Array(5).fill(null).map((_, i) => ({
-          id: `${sessionId}_${i}`,
-          styleName: 'Designing...',
-          html: '',
-          status: 'streaming' as const,
-      }));
+      // First artifact is the original (already complete), rest are placeholders
+      const placeholderArtifacts: Artifact[] = [
+          {
+              id: `${sessionId}_0`,
+              styleName: `${sourceArtifact.styleName} (Original)`,
+              html: sourceArtifact.html,
+              status: 'complete' as const,
+          },
+          ...Array(4).fill(null).map((_, i) => ({
+              id: `${sessionId}_${i + 1}`,
+              styleName: 'Designing...',
+              html: '',
+              status: 'streaming' as const,
+          }))
+      ];
 
       const newSession: Session = {
           id: sessionId,
-          prompt: `More like: ${session.prompt}`,
+          prompt: `Similar to: ${session.prompt}`,
           timestamp: baseTime,
           artifacts: placeholderArtifacts
       };
@@ -861,19 +870,19 @@ IMPORTANT: Use the SAME visual style (colors, fonts, textures, effects) but crea
       setFocusedArtifactIndex(null);
 
       try {
-          // Generate 5 style variations based on the source
+          // Generate 4 style variations (original is already slot 0)
           const stylePrompt = `
-Analyze this HTML design and generate 5 creative variations of its visual style.
+Analyze this HTML design and generate 4 creative variations of its visual style.
 
 SOURCE DESIGN:
 \`\`\`html
 ${sourceArtifact.html}
 \`\`\`
 
-Generate 5 distinct style names that are similar in spirit but with interesting variations.
+Generate 4 distinct style names that are similar in spirit but with interesting variations.
 Each should evoke a slightly different mood or material quality while maintaining the core aesthetic.
 
-Return ONLY a raw JSON array of 5 creative style names.
+Return ONLY a raw JSON array of 4 creative style names.
           `.trim();
 
           let styleResponse;
@@ -895,25 +904,25 @@ Return ONLY a raw JSON array of 5 creative style names.
               }
           }
 
-          if (!generatedStyles || generatedStyles.length < 5) {
+          if (!generatedStyles || generatedStyles.length < 4) {
               generatedStyles = [
                   `${sourceArtifact.styleName} - Refined`,
                   `${sourceArtifact.styleName} - Bold`,
                   `${sourceArtifact.styleName} - Minimal`,
-                  `${sourceArtifact.styleName} - Warm`,
-                  `${sourceArtifact.styleName} - Cool`
+                  `${sourceArtifact.styleName} - Warm`
               ];
           }
 
-          generatedStyles = generatedStyles.slice(0, 5);
+          generatedStyles = generatedStyles.slice(0, 4);
 
+          // Update style names for slots 1-4 (slot 0 is the original)
           setSessions(prev => prev.map(s => {
               if (s.id !== sessionId) return s;
               return {
                   ...s,
                   artifacts: s.artifacts.map((art, i) => ({
                       ...art,
-                      styleName: generatedStyles[i]
+                      styleName: i === 0 ? art.styleName : (generatedStyles[i - 1] || art.styleName)
                   }))
               };
           }));
@@ -997,7 +1006,10 @@ Return ONLY RAW HTML. No markdown fences.
     }
           };
 
-          await Promise.all(placeholderArtifacts.map((art, i) => generateArtifact(art, generatedStyles[i])));
+          // Generate only for slots 1-4 (slot 0 is the original, already complete)
+          await Promise.all(
+              placeholderArtifacts.slice(1).map((art, i) => generateArtifact(art, generatedStyles[i]))
+          );
 
       } catch (e: any) {
           console.error("Error in More Like This:", e);
@@ -1673,44 +1685,15 @@ Return ONLY RAW HTML. No markdown fences.
                         <GridIcon /> Grid View
                     </button>
 
-                    {/* Style DNA dropdown */}
-                    <div className="style-dna-dropdown">
-                        <button
-                            className={`style-dna-trigger ${lockedStyle ? 'active' : ''}`}
-                            disabled={isLoading}
-                            onClick={(e) => {
-                                const dropdown = (e.currentTarget as HTMLElement).closest('.style-dna-dropdown');
-                                dropdown?.classList.toggle('open');
-                            }}
-                        >
-                            <StyleIcon /> Style DNA {lockedStyle && '✓'}
-                        </button>
-                        <div className="style-dna-menu">
-                            {!lockedStyle ? (
-                                <button onClick={() => {
-                                    handleLockStyle();
-                                    document.querySelector('.style-dna-dropdown')?.classList.remove('open');
-                                }}>
-                                    Lock This Style
-                                </button>
-                            ) : (
-                                <>
-                                    <button onClick={() => {
-                                        handleRemixLayout();
-                                        document.querySelector('.style-dna-dropdown')?.classList.remove('open');
-                                    }}>
-                                        Remix Layout
-                                    </button>
-                                    <button onClick={() => {
-                                        handleUnlockStyle();
-                                        document.querySelector('.style-dna-dropdown')?.classList.remove('open');
-                                    }}>
-                                        Unlock Style
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    </div>
+                    {/* Lock Style toggle button */}
+                    <button
+                        className={lockedStyle ? 'active' : ''}
+                        disabled={isLoading}
+                        onClick={() => lockedStyle ? handleUnlockStyle() : handleLockStyle()}
+                        title={lockedStyle ? `Style locked: ${lockedStyle.styleName}. Click to unlock.` : 'Lock this design\'s style for new generations'}
+                    >
+                        <StyleIcon /> {lockedStyle ? 'Style Locked' : 'Lock Style'}
+                    </button>
 
                     <button onClick={handleGenerateVariations} disabled={isLoading}>
                         <SparklesIcon /> Explore UX
