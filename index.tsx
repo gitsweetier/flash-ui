@@ -103,13 +103,18 @@ function App() {
       inputRef.current?.focus();
   }, []);
 
-  // Close library dropdown when clicking outside
+  // Close dropdown menus when clicking outside
   useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
           const libraryDropdown = document.querySelector('.library-dropdown');
           const libraryMenu = document.querySelector('.library-menu');
           if (libraryDropdown && libraryMenu && !libraryDropdown.contains(event.target as Node)) {
               libraryMenu.classList.remove('open');
+          }
+
+          const styleDropdown = document.querySelector('.style-dna-dropdown');
+          if (styleDropdown && !styleDropdown.contains(event.target as Node)) {
+              styleDropdown.classList.remove('open');
           }
       };
 
@@ -208,16 +213,44 @@ function App() {
 
   const handleGenerateVariations = useCallback(async () => {
     const currentSession = sessions[currentSessionIndex];
-    if (!currentSession || focusedArtifactIndex === null) return;
+    if (!currentSession || focusedArtifactIndex === null || isLoading) return;
     const currentArtifact = currentSession.artifacts[focusedArtifactIndex];
+
+    const basePrompt = (editedPrompt ?? currentSession.prompt).trim();
+    const styleRefHtml = (lockedStyle?.html ?? currentArtifact.html)?.trim();
+    const styleRefName = lockedStyle?.styleName ?? currentArtifact.styleName;
+
+    if (!basePrompt) return;
+
+    if (!styleRefHtml) {
+        setComponentVariations([]);
+        setDrawerState({
+            isOpen: true,
+            mode: 'variations',
+            title: 'Error: Missing style reference',
+            data: {
+                error: true,
+                message: 'No style reference available',
+                details: 'Generate a design first (or lock Style DNA) before exploring UX variations.'
+            }
+        });
+        return;
+    }
 
     setIsLoading(true);
     setComponentVariations([]);
-    setDrawerState({ isOpen: true, mode: 'variations', title: 'Variations', data: currentArtifact.id });
+    setDrawerState({ isOpen: true, mode: 'variations', title: 'Explore UX', data: currentArtifact.id });
 
     try {
         const prompt = `
-You are a master UX designer. Generate 5 RADICAL UX VARIATIONS of: "${currentSession.prompt}".
+You are a master UX designer. Generate 5 RADICAL UX VARIATIONS for the same user goal as: "${basePrompt}".
+
+**CRITICAL CONSTRAINT — KEEP VISUAL STYLE CONSTANT**
+Match the visual style (colors, typography, spacing, visual language, effects) from this STYLE REFERENCE.
+STYLE REFERENCE (${styleRefName}):
+\`\`\`html
+${styleRefHtml}
+\`\`\`
 
 **GOAL:**
 Create fundamentally different user experience approaches - different information architectures, interaction patterns, and user flows. Not just visual style changes.
@@ -231,13 +264,15 @@ Create fundamentally different user experience approaches - different informatio
 - Generate high-fidelity HTML/CSS that implements this UX approach
 
 **DESIGN FOCUS:**
+- Do NOT change the core visual style (colors, fonts, vibe) — only the UX structure and flow
 - Prioritize usability and clarity over decoration
 - Include realistic microcopy and proper states
 - Implement keyboard navigation and accessibility basics
-- Use clean, readable visual design that supports the UX goals
 
 Required JSON Output Format (stream ONE object per line):
 \`{ "name": "UX Approach Name", "html": "..." }\`
+
+Return ONLY the streamed JSON objects. No markdown fences.
         `.trim();
 
         const responseStream = streamVariations(prompt, selectedModelId);
@@ -262,15 +297,16 @@ Required JSON Output Format (stream ONE object per line):
     } finally {
         setIsLoading(false);
     }
-  }, [sessions, currentSessionIndex, focusedArtifactIndex]);
+  }, [sessions, currentSessionIndex, focusedArtifactIndex, editedPrompt, lockedStyle, selectedModelId, isLoading]);
 
-  const applyVariation = (html: string) => {
+  const applyVariation = (variation: ComponentVariation) => {
       if (focusedArtifactIndex === null) return;
+      if (!variation?.html) return;
       setSessions(prev => prev.map((sess, i) => 
           i === currentSessionIndex ? {
               ...sess,
               artifacts: sess.artifacts.map((art, j) => 
-                j === focusedArtifactIndex ? { ...art, html, status: 'complete' } : art
+                j === focusedArtifactIndex ? { ...art, html: variation.html, styleName: variation.name || art.styleName, status: 'complete' } : art
               )
           } : sess
       ));
@@ -390,31 +426,73 @@ Required JSON Output Format (stream ONE object per line):
 
   // Word substitution handlers
   const handleWordClick = useCallback(async (word: string, index: number) => {
+      const session = sessions[currentSessionIndex];
+      const fullPrompt = (editedPrompt ?? session?.prompt ?? '').trim();
       setWordSuggestion({ word, index, suggestions: [], isLoading: true });
 
+      if (!fullPrompt) {
+          setWordSuggestion(null);
+          return;
+      }
+
       try {
-          const prompt = `
+          const prompt = lockedStyle ? `
+You are helping a designer explore UX alternatives by swapping ONE word in a UI prompt, while keeping the same visual style (colors, fonts, vibe).
+
+FULL PROMPT:
+"${fullPrompt}"
+
+SELECTED WORD:
+"${word}"
+
+TASK:
+Generate 5 alternative SINGLE-WORD replacements for the selected word that would change the UX approach (information architecture, interaction pattern, or user flow).
+
+RULES:
+- Each suggestion must be ONE word only (no spaces, no punctuation)
+- Prefer UX pattern words (e.g., "wizard", "dashboard", "timeline", "kanban", "inbox", "palette", "splitview", "stepper")
+- Avoid purely visual/style adjectives (e.g., "neon", "vintage", "glass", "brutalist")
+- Try to keep the replacement grammatically compatible with how the word is used
+
+Return ONLY a raw JSON array of 5 strings.
+          `.trim()
+          : `
 You are helping a designer explore creative alternatives for UI prompt words.
 
-Original word: "${word}"
-Context: This word is part of a UI design prompt.
+FULL PROMPT:
+"${fullPrompt}"
 
-Generate 5 alternative words that would change the VISUAL FEEL of the design without changing the core UX/functionality.
+SELECTED WORD:
+"${word}"
+
+TASK:
+Generate 5 alternative SINGLE-WORD replacements that would change the VISUAL FEEL of the design without changing the core UX/functionality.
 Focus on words that evoke different:
 - Materials (glass, paper, metal, organic, etc.)
 - Moods (playful, serious, ethereal, bold, etc.)
 - Visual styles (minimal, maximal, geometric, organic, etc.)
 
-Return ONLY a raw JSON array of 5 single words. Example: ["ethereal", "brutalist", "organic", "neon", "vintage"]
+Return ONLY a raw JSON array of 5 strings. Example: ["ethereal", "brutalist", "organic", "neon", "vintage"]
           `.trim();
 
-          const response = await generateContent(prompt);
+          const response = await generateContent(prompt, selectedModelId);
           const text = response.text || '[]';
           const jsonMatch = text.match(/\[[\s\S]*\]/);
 
           if (jsonMatch) {
-              const suggestions = JSON.parse(jsonMatch[0]);
-              setWordSuggestion({ word, index, suggestions, isLoading: false });
+              const parsed = JSON.parse(jsonMatch[0]);
+              const suggestions = Array.isArray(parsed)
+                  ? parsed
+                      .map(s => String(s).trim())
+                      .filter(Boolean)
+                      .slice(0, 5)
+                  : [];
+
+              if (suggestions.length > 0) {
+                  setWordSuggestion({ word, index, suggestions, isLoading: false });
+              } else {
+                  setWordSuggestion(null);
+              }
           } else {
               setWordSuggestion(null);
           }
@@ -422,7 +500,7 @@ Return ONLY a raw JSON array of 5 single words. Example: ["ethereal", "brutalist
           console.error('Error fetching word suggestions:', e);
           setWordSuggestion(null);
       }
-  }, []);
+  }, [sessions, currentSessionIndex, editedPrompt, lockedStyle, selectedModelId]);
 
   const handleWordReplace = useCallback((newWord: string) => {
       if (!wordSuggestion) return;
@@ -521,129 +599,62 @@ Return ONLY a raw JSON array of 5 single words. Example: ["ethereal", "brutalist
     setEditedPrompt(null); // Clear any edited prompt when starting new session 
 
     try {
-        const uxPrompt = `
-Generate 5 distinct, highly divergent UX directions for: "${trimmedInput}".
-
-**GOAL:**
-Create radically different user experience approaches, not visual styles. Focus on structure, flow, information architecture, and interaction patterns.
-
-**FOR EACH UX DIRECTION, PROVIDE:**
-- name: A short, evocative name (e.g., "Progressive Disclosure Wizard", "Inline Edit Dashboard", "Command Palette Interface", "Split View Workspace", "Timeline Scrubber")
-- targetUser: Who is this designed for? (e.g., "power users who need speed", "novices who need guidance", "mobile-first commuters")
-- jobToBeDone: What core job does this help the user accomplish?
-- primaryAction: The main action users take (e.g., "filter and compare", "quick edit", "navigate via search")
-- secondaryActions: 2-3 supporting actions
-- informationHierarchy: Top 5 elements in order of importance (what users see/do first)
-- requiredStates: List required UI states (e.g., ["loading", "empty", "error", "success", "editing"])
-- accessibilityNotes: Key accessibility considerations (e.g., "keyboard navigation essential", "screen reader announcements", "high contrast required")
+        // Generate 5 creative style themes using physical/material metaphors
+        const stylePrompt = `
+Generate 5 RADICAL CONCEPTUAL STYLE THEMES for a UI component: "${trimmedInput}".
 
 **STRICT IP SAFEGUARD:**
-Never use artist or brand names. Focus on UX patterns and user needs.
+No names of artists, brands, or copyrighted works.
+Instead, describe the *Physicality* and *Material Logic* of the UI.
 
-**OUTPUT FORMAT:**
-Return ONLY a raw JSON array of 5 objects. Each object must have: name, targetUser, jobToBeDone, primaryAction, secondaryActions (array), informationHierarchy (array), requiredStates (array), accessibilityNotes (string).
+**CREATIVE GUIDANCE (Use these as EXAMPLES of how to describe style, but INVENT YOUR OWN):**
+1. "Asymmetrical Primary Grid" (Heavy black strokes, rectilinear structure, flat primary pigments, high-contrast white space)
+2. "Suspended Kinetic Mobile" (Delicate wire-thin connections, floating organic primary shapes, slow-motion balance, white-void background)
+3. "Grainy Risograph Press" (Overprinted translucent inks, dithered grain textures, monochromatic color depth, raw paper substrate)
+4. "Volumetric Spectral Fluid" (Generative morphing gradients, soft-focus diffusion, bioluminescent light sources, spectral chromatic aberration)
+5. "Weathered Industrial Patina" (Oxidized metal textures, exposed rivets, distressed typography, warm amber undertones)
+6. "Crystalline Frost Formation" (Ice-like transparency, sharp geometric facets, cool blue-white palette, frosted glass effects)
+7. "Handmade Paper Collage" (Torn edges, layered translucent papers, visible fibers, muted earth tones, imperfect alignment)
 
-Example structure:
-[
-  {
-    "name": "Progressive Disclosure Wizard",
-    "targetUser": "novices who need step-by-step guidance",
-    "jobToBeDone": "complete a complex task without feeling overwhelmed",
-    "primaryAction": "advance through steps with clear progress",
-    "secondaryActions": ["skip optional steps", "review previous steps", "save progress"],
-    "informationHierarchy": ["current step title", "step instructions", "input fields", "progress indicator", "navigation buttons"],
-    "requiredStates": ["loading", "validation error", "success", "saved draft"],
-    "accessibilityNotes": "keyboard navigation, ARIA live regions for step changes, focus management"
-  }
-]
+**YOUR TASK:**
+Invent 5 unique design personas based on NEW physical metaphors. Each should evoke a distinct material, texture, or physical phenomenon.
+
+Return ONLY a raw JSON array of 5 strings - just the creative style names.
+Example: ["Molten Glass Cascade", "Pressed Botanical Archive", "Neon Noir Circuit", "Chalk Dust Classroom", "Liquid Mercury Pool"]
         `.trim();
 
-        let uxResponse;
+        let styleResponse;
         try {
-            uxResponse = await generateContent(uxPrompt, selectedModelId);
+            styleResponse = await generateContent(stylePrompt, selectedModelId);
         } catch (e: any) {
-            console.error("Error generating UX directions:", e);
-            throw new Error(`Failed to generate UX directions: ${e.message || 'Unknown error'}`);
+            console.error("Error generating style themes:", e);
+            throw new Error(`Failed to generate style themes: ${e.message || 'Unknown error'}`);
         }
 
-        let generatedUxDirections: Array<{
-            name: string;
-            targetUser: string;
-            jobToBeDone: string;
-            primaryAction: string;
-            secondaryActions: string[];
-            informationHierarchy: string[];
-            requiredStates: string[];
-            accessibilityNotes: string;
-        }> = [];
-        
-        const uxText = uxResponse.text || '[]';
-        const jsonMatch = uxText.match(/\[[\s\S]*\]/);
-        
+        let generatedStyles: string[] = [];
+
+        const styleText = styleResponse.text || '[]';
+        const jsonMatch = styleText.match(/\[[\s\S]*\]/);
+
         if (jsonMatch) {
             try {
-                generatedUxDirections = JSON.parse(jsonMatch[0]);
+                generatedStyles = JSON.parse(jsonMatch[0]);
             } catch (e) {
-                console.warn("Failed to parse UX directions, using fallbacks");
+                console.warn("Failed to parse style themes, using fallbacks");
             }
         }
 
-        if (!generatedUxDirections || generatedUxDirections.length < 5) {
-            generatedUxDirections = [
-                {
-                    name: "Progressive Disclosure Wizard",
-                    targetUser: "novices who need step-by-step guidance",
-                    jobToBeDone: "complete a complex task without feeling overwhelmed",
-                    primaryAction: "advance through steps with clear progress",
-                    secondaryActions: ["skip optional steps", "review previous steps"],
-                    informationHierarchy: ["current step title", "step instructions", "input fields", "progress indicator", "navigation buttons"],
-                    requiredStates: ["loading", "validation error", "success"],
-                    accessibilityNotes: "keyboard navigation, ARIA live regions"
-                },
-                {
-                    name: "Inline Edit Dashboard",
-                    targetUser: "power users who need speed",
-                    jobToBeDone: "edit multiple items quickly without page reloads",
-                    primaryAction: "click to edit in place",
-                    secondaryActions: ["bulk actions", "filter and sort", "export data"],
-                    informationHierarchy: ["data table", "inline edit controls", "save/cancel buttons", "status indicators", "toolbar"],
-                    requiredStates: ["editing", "saving", "error", "success"],
-                    accessibilityNotes: "keyboard shortcuts, focus management, screen reader announcements"
-                },
-                {
-                    name: "Command Palette Interface",
-                    targetUser: "keyboard-first power users",
-                    jobToBeDone: "access any feature instantly via search",
-                    primaryAction: "type to search and execute commands",
-                    secondaryActions: ["navigate results", "see keyboard shortcuts", "recent commands"],
-                    informationHierarchy: ["search input", "command results", "preview/help text", "keyboard hints", "recent history"],
-                    requiredStates: ["searching", "no results", "executing", "success"],
-                    accessibilityNotes: "keyboard only, ARIA combobox, live search results"
-                },
-                {
-                    name: "Split View Workspace",
-                    targetUser: "users comparing or referencing multiple views",
-                    jobToBeDone: "work with related information side-by-side",
-                    primaryAction: "navigate between panels",
-                    secondaryActions: ["resize panels", "sync scrolling", "close panels"],
-                    informationHierarchy: ["left panel content", "right panel content", "resize handle", "panel controls", "sync indicator"],
-                    requiredStates: ["loading", "empty", "error", "syncing"],
-                    accessibilityNotes: "keyboard panel navigation, focus trap, screen reader panel announcements"
-                },
-                {
-                    name: "Timeline Scrubber",
-                    targetUser: "users exploring chronological or sequential data",
-                    jobToBeDone: "navigate through time-based information intuitively",
-                    primaryAction: "scrub through timeline to see changes",
-                    secondaryActions: ["zoom in/out", "jump to date", "play animation"],
-                    informationHierarchy: ["timeline control", "current view", "detail panel", "zoom controls", "playback controls"],
-                    requiredStates: ["loading", "playing", "paused", "error"],
-                    accessibilityNotes: "keyboard timeline navigation, ARIA slider, live region updates"
-                }
+        if (!generatedStyles || generatedStyles.length < 5) {
+            generatedStyles = [
+                "Molten Glass Cascade",
+                "Pressed Botanical Archive",
+                "Neon Noir Circuit",
+                "Weathered Industrial Patina",
+                "Crystalline Frost Formation"
             ];
         }
 
-        generatedUxDirections = generatedUxDirections.slice(0, 5);
+        generatedStyles = generatedStyles.slice(0, 5);
 
         setSessions(prev => prev.map(s => {
             if (s.id !== sessionId) return s;
@@ -651,35 +662,31 @@ Example structure:
                 ...s,
                 artifacts: s.artifacts.map((art, i) => ({
                     ...art,
-                    styleName: generatedUxDirections[i]?.name || 'Designing...'
+                    styleName: generatedStyles[i] || 'Designing...'
                 }))
             };
         }));
 
-        const generateArtifact = async (artifact: Artifact, uxSpec: typeof generatedUxDirections[0]) => {
+        const generateArtifact = async (artifact: Artifact, styleName: string) => {
             try {
-                // Build the base prompt with UX focus
+                // Build the base prompt with creative style focus
                 let prompt = `
-You are Flash UI. Create a high-fidelity, usable UI component for: "${trimmedInput}".
+You are Flash UI, a master UI/UX designer. Create a high-fidelity UI component for: "${trimmedInput}".
 
-**UX DIRECTION: ${uxSpec.name}**
+**STYLE THEME: ${styleName}**
 
-**UX SPECIFICATION:**
-- Target User: ${uxSpec.targetUser}
-- Job to be Done: ${uxSpec.jobToBeDone}
-- Primary Action: ${uxSpec.primaryAction}
-- Secondary Actions: ${uxSpec.secondaryActions.join(', ')}
-- Information Hierarchy (in order): ${uxSpec.informationHierarchy.join(' → ')}
-- Required States: ${uxSpec.requiredStates.join(', ')}
-- Accessibility: ${uxSpec.accessibilityNotes}
+Fully embody this style theme. The name evokes a physical material, texture, or phenomenon - translate that into:
+- Color palette inspired by the theme
+- Typography that matches the mood
+- Textures, shadows, and effects that feel like the material
+- Layout and spacing that reinforce the aesthetic
+- Micro-interactions and hover states consistent with the theme
 
-**DESIGN PRINCIPLES:**
-1. **Usability First**: Optimize for clarity and ease of use, not decoration. Visual design should support the UX goals.
-2. **State Management**: Implement ALL required states (${uxSpec.requiredStates.join(', ')}) with clear visual feedback.
-3. **Accessibility**: ${uxSpec.accessibilityNotes}. Include proper ARIA labels, keyboard navigation, and focus management.
-4. **Microcopy**: Include realistic, helpful text (button labels, helper text, error messages, empty states).
-5. **Visual Hierarchy**: Respect the information hierarchy. The most important elements should be visually prominent.
-6. **Performance**: Use efficient CSS. Avoid heavy filters or complex animations that distract from usability.
+**DESIGN REQUIREMENTS:**
+1. **Visual Impact**: Create a striking, memorable design that fully commits to the style theme
+2. **Functional UI**: Despite the creative styling, ensure the component is usable and interactive
+3. **Rich Details**: Include thoughtful hover states, transitions, and visual feedback
+4. **Complete Implementation**: Include realistic content, not placeholder text
 `;
 
                 // Add style reference if style is locked
@@ -691,27 +698,16 @@ Analyze and match the visual style (colors, typography, textures, spacing, visua
 ${lockedStyle.html}
 \`\`\`
 
-IMPORTANT: Use the SAME visual style (colors, fonts, textures, effects) but create a COMPLETELY DIFFERENT UX structure that follows the UX specification above.
-`;
-                } else {
-                    prompt += `
-**VISUAL STYLE GUIDANCE:**
-- Use system fonts or high-quality web fonts (avoid decorative fonts)
-- High contrast for readability
-- Clear spacing and visual breathing room
-- Subtle, purposeful animations (focus states, transitions)
-- Avoid excessive shadows, gradients, or effects that reduce usability
+IMPORTANT: Use the SAME visual style (colors, fonts, textures, effects) but create a DIFFERENT layout/structure.
 `;
                 }
 
                 prompt += `
 **TECHNICAL REQUIREMENTS:**
-- Include all required states with appropriate UI feedback
-- Implement keyboard navigation (tab order, enter/esc keys)
-- Use semantic HTML
-- Include proper form labels and ARIA attributes where needed
-- Add realistic microcopy (not placeholder text)
-- Return ONLY RAW HTML. No markdown fences.
+- Return ONLY RAW HTML with embedded CSS (no markdown fences)
+- Use modern CSS (flexbox, grid, custom properties, filters, gradients)
+- Include hover states and transitions
+- Make it feel alive and polished
                 `.trim();
           
                 const responseStream = streamGenerateContent(prompt, undefined, selectedModelId);
@@ -786,7 +782,7 @@ IMPORTANT: Use the SAME visual style (colors, fonts, textures, effects) but crea
             }
         };
 
-        await Promise.all(placeholderArtifacts.map((art, i) => generateArtifact(art, generatedUxDirections[i])));
+        await Promise.all(placeholderArtifacts.map((art, i) => generateArtifact(art, generatedStyles[i])));
 
     } catch (e: any) {
         console.error("Fatal error in generation process", e);
@@ -1259,14 +1255,16 @@ Return ONLY RAW HTML. No markdown fences.
           c => c.artifactId === artifact.id && c.sessionId === session.id
       );
 
-      let componentToUpdate: SavedComponent;
-      
-      if (existingComponent) {
-          // Already saved, just toggle favorite
-          componentToUpdate = existingComponent;
-      } else {
-          // Save first, then favorite
-          componentToUpdate = {
+      const componentToSave: SavedComponent = existingComponent
+          ? {
+              ...existingComponent,
+              // Keep content reasonably fresh if the artifact has evolved
+              prompt: session.prompt,
+              styleName: artifact.styleName,
+              html: artifact.html,
+              isFavorite: !existingComponent.isFavorite
+          }
+          : {
               id: generateId(),
               artifactId: artifact.id,
               sessionId: session.id,
@@ -1278,10 +1276,8 @@ Return ONLY RAW HTML. No markdown fences.
               collectionIds: [],
               isFavorite: true
           };
-      }
 
-      componentToUpdate.isFavorite = !componentToUpdate.isFavorite;
-      saveComponent(componentToUpdate);
+      saveComponent(componentToSave);
       setSavedComponents(getSavedComponents());
   }, [sessions, savedComponents]);
 
@@ -1441,10 +1437,6 @@ Return ONLY RAW HTML. No markdown fences.
 
   return (
     <>
-        <a href="https://x.com/ammaar" target="_blank" rel="noreferrer" className={`creator-credit ${hasStarted ? 'hide-on-mobile' : ''}`}>
-            created by @ammaar
-        </a>
-
         <SideDrawer 
             isOpen={drawerState.isOpen} 
             onClose={() => {
@@ -1488,7 +1480,7 @@ Return ONLY RAW HTML. No markdown fences.
                     ) : componentVariations.length > 0 ? (
                         <div className="sexy-grid">
                             {componentVariations.map((v, i) => (
-                                 <div key={i} className="sexy-card" onClick={() => applyVariation(v.html)}>
+                                 <div key={i} className="sexy-card" onClick={() => applyVariation(v)}>
                                      <div className="sexy-preview">
                                          <iframe srcDoc={v.html} title={v.name} sandbox="allow-scripts allow-same-origin" />
                                      </div>
@@ -1683,20 +1675,36 @@ Return ONLY RAW HTML. No markdown fences.
 
                     {/* Style DNA dropdown */}
                     <div className="style-dna-dropdown">
-                        <button className={`style-dna-trigger ${lockedStyle ? 'active' : ''}`} disabled={isLoading}>
+                        <button
+                            className={`style-dna-trigger ${lockedStyle ? 'active' : ''}`}
+                            disabled={isLoading}
+                            onClick={(e) => {
+                                const dropdown = (e.currentTarget as HTMLElement).closest('.style-dna-dropdown');
+                                dropdown?.classList.toggle('open');
+                            }}
+                        >
                             <StyleIcon /> Style DNA {lockedStyle && '✓'}
                         </button>
                         <div className="style-dna-menu">
                             {!lockedStyle ? (
-                                <button onClick={handleLockStyle}>
+                                <button onClick={() => {
+                                    handleLockStyle();
+                                    document.querySelector('.style-dna-dropdown')?.classList.remove('open');
+                                }}>
                                     Lock This Style
                                 </button>
                             ) : (
                                 <>
-                                    <button onClick={handleRemixLayout}>
+                                    <button onClick={() => {
+                                        handleRemixLayout();
+                                        document.querySelector('.style-dna-dropdown')?.classList.remove('open');
+                                    }}>
                                         Remix Layout
                                     </button>
-                                    <button onClick={handleUnlockStyle}>
+                                    <button onClick={() => {
+                                        handleUnlockStyle();
+                                        document.querySelector('.style-dna-dropdown')?.classList.remove('open');
+                                    }}>
                                         Unlock Style
                                     </button>
                                 </>
@@ -1713,6 +1721,31 @@ Return ONLY RAW HTML. No markdown fences.
                     <button onClick={handleShowCode}>
                         <CodeIcon /> Source
                     </button>
+
+                    {/* Favorite button - inline with other action buttons */}
+                    {focusedArtifactIndex !== null && currentSession && (() => {
+                        const artifact = currentSession.artifacts[focusedArtifactIndex];
+                        const savedComponent = savedComponents.find(
+                            c => c.artifactId === artifact.id && c.sessionId === currentSession.id
+                        );
+                        const isFavorite = savedComponent?.isFavorite || false;
+
+                        return (
+                            <button
+                                className={isFavorite ? 'active' : ''}
+                                onClick={() => {
+                                    if (savedComponent) {
+                                        handleToggleFavorite(savedComponent.id);
+                                    } else {
+                                        handleSaveAndFavorite(artifact.id, currentSession.id);
+                                    }
+                                }}
+                                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            >
+                                <StarIcon filled={isFavorite} /> {isFavorite ? 'Favorited' : 'Favorite'}
+                            </button>
+                        );
+                    })()}
                  </div>
 
                  {/* Blend Styles button - shows when 2 designs are selected */}
@@ -1724,31 +1757,6 @@ Return ONLY RAW HTML. No markdown fences.
                  {blendSelection.length === 1 && (
                     <div className="blend-hint">Select one more design to blend</div>
                  )}
-
-                 {/* Favorite button - always shown when focused */}
-                 {focusedArtifactIndex !== null && currentSession && (() => {
-                    const artifact = currentSession.artifacts[focusedArtifactIndex];
-                    const savedComponent = savedComponents.find(
-                        c => c.artifactId === artifact.id && c.sessionId === currentSession.id
-                    );
-                    const isFavorite = savedComponent?.isFavorite || false;
-                    
-                    return (
-                        <button
-                            className={`favorite-button ${isFavorite ? 'active' : ''}`}
-                            onClick={() => {
-                                if (savedComponent) {
-                                    handleToggleFavorite(savedComponent.id);
-                                } else {
-                                    handleSaveAndFavorite(artifact.id, currentSession.id);
-                                }
-                            }}
-                            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                        >
-                            <StarIcon filled={isFavorite} />
-                        </button>
-                    );
-                 })()}
             </div>
 
             {/* Style locked indicator near input */}

@@ -516,6 +516,11 @@ html, body {
     border-color: rgba(255,255,255,0.3);
     transform: translateY(-2px);
 }
+.action-buttons button.active {
+    background: rgba(251, 191, 36, 0.2);
+    border-color: rgba(251, 191, 36, 0.4);
+    color: #fbbf24;
+}
 
 /* === Navigation Handles === */
 .nav-handle {
@@ -2008,7 +2013,8 @@ html, body {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-.style-dna-dropdown:hover .style-dna-menu {
+.style-dna-dropdown:hover .style-dna-menu,
+.style-dna-dropdown.open .style-dna-menu {
     opacity: 1;
     visibility: visible;
 }

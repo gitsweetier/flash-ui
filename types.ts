@@ -19,3 +19,26 @@ export interface Session {
 
 export interface ComponentVariation { name: string; html: string; }
 export interface LayoutOption { name: string; css: string; previewHtml: string; }
+
+// Library types
+export interface SavedComponent {
+  id: string;
+  artifactId: string;
+  sessionId: string;
+  prompt: string;
+  styleName: string;
+  html: string;
+  timestamp: number;
+  tags: string[];
+  collectionIds: string[];
+  isFavorite: boolean;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  createdAt: number;
+  componentIds: string[];
+}
